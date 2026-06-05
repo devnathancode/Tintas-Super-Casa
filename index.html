@@ -8,26 +8,6 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 <style>
 /* ─── CSS VARIABLES ─────────────────────────────── */
-.status-loja{
-    width: fit-content;
-    margin: 20px auto;
-    padding: 12px 24px;
-    border-radius: 40px;
-    font-size: 18px;
-    font-weight: bold;
-    color: white;
-    transition: 0.3s;
-}
-
-.aberto{
-    background: #00c853;
-    box-shadow: 0 0 15px #00c853;
-}
-
-.fechado{
-    background: #ff1744;
-    box-shadow: 0 0 15px #ff1744;
-}
 :root {
   --blue-dark: #0D47A1;
   --blue-mid:  #1565C0;
@@ -621,10 +601,6 @@ footer{background:linear-gradient(180deg,#0A2568 0%,#071A4A 100%);color:#fff;pad
 </style>
 </head>
 <body>
-<!-- BOTÃO STATUS -->
-<div id="statusLoja" class="status-loja fechado">
-    🔴 Fechado Agora
-</div>
 
 <!-- LOADER -->
 <div id="loader">
@@ -778,43 +754,6 @@ footer{background:linear-gradient(180deg,#0A2568 0%,#071A4A 100%);color:#fff;pad
   </div>
 </section>
 
-<!-- GALERIA -->
-<section id="galeria">
-  <div class="section-inner">
-    <div class="section-header reveal">
-      <div class="section-tag">Nossa Galeria</div>
-      <h2>Inspirações e <span>Projetos</span></h2>
-      <p>Veja a qualidade dos nossos produtos em ação.</p>
-    </div>
-    <div class="gallery-grid reveal">
-      <div class="gallery-item">
-        <img src="https://images.unsplash.com/photo-1589939705384-5185137a7f0f?w=800&q=80" alt="Loja de Tintas">
-        <div class="overlay"><span class="overlay-label">Nossa Loja em Diadema</span></div>
-      </div>
-      <div class="gallery-item">
-        <img src="https://images.unsplash.com/photo-1562259949-e8e7689d7828?w=500&q=80" alt="Prateleiras de Tintas">
-        <div class="overlay"><span class="overlay-label">Estoque Completo</span></div>
-      </div>
-      <div class="gallery-item">
-        <img src="https://images.unsplash.com/photo-1525909002-1b05e0c869d8?w=500&q=80" alt="Mistura de Cores">
-        <div class="overlay"><span class="overlay-label">Personalização de Cores</span></div>
-      </div>
-      <div class="gallery-item">
-        <img src="https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=500&q=80" alt="Pintura Residencial">
-        <div class="overlay"><span class="overlay-label">Pintura Residencial</span></div>
-      </div>
-      <div class="gallery-item">
-        <img src="https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=500&q=80" alt="Pintura Automotiva">
-        <div class="overlay"><span class="overlay-label">Tintas Automotivas</span></div>
-      </div>
-      <div class="gallery-item">
-        <img src="https://images.unsplash.com/photo-1572981779307-38b8cabb2407?w=500&q=80" alt="Ferramentas">
-        <div class="overlay"><span class="overlay-label">Acessórios e Ferramentas</span></div>
-      </div>
-    </div>
-  </div>
-</section>
-
 <!-- SOBRE -->
 <section id="sobre">
   <div class="section-inner">
@@ -931,25 +870,6 @@ footer{background:linear-gradient(180deg,#0A2568 0%,#071A4A 100%);color:#fff;pad
           <a href="https://maps.google.com/?q=Avenida+Alda+1636+Diadema+SP" target="_blank" class="btn-maps"><i class="fas fa-directions"></i> Como Chegar</a>
         </div>
       </div>
-      <div class="reveal-right">
-        <div class="contato-form">
-          <h3>Envie uma Mensagem</h3>
-          <div class="form-group"><label>Nome Completo</label><input type="text" id="f-nome" placeholder="Seu nome"></div>
-          <div class="form-group"><label>WhatsApp / Telefone</label><input type="tel" id="f-tel" placeholder="(11) 9 0000-0000"></div>
-          <div class="form-group"><label>Assunto</label>
-            <select id="f-assunto">
-              <option>Orçamento de Tintas</option>
-              <option>Personalização de Cores</option>
-              <option>Entrega</option>
-              <option>Outro</option>
-            </select>
-          </div>
-          <div class="form-group"><label>Mensagem</label><textarea id="f-msg" placeholder="Descreva sua necessidade..."></textarea></div>
-          <button class="btn-submit" onclick="enviarWhatsApp()"><i class="fab fa-whatsapp"></i> Enviar via WhatsApp</button>
-        </div>
-      </div>
-    </div>
-  </div>
 </section>
 
 <!-- FOOTER -->
@@ -1291,36 +1211,6 @@ window.addEventListener('scroll',()=>{
 /* ─── INIT ─────────────────────────────────────── */
 renderProducts();
 updateCartUI();
-<script>
-function verificarLoja() {
-
-    const agora = new Date();
-    const hora = agora.getHours();
-    const dia = agora.getDay();
-
-    const status = document.getElementById("statusLoja");
-
-    // Domingo fechado
-    if(dia === 0){
-        status.innerHTML = "🔴 Fechado Agora";
-        status.className = "status-loja fechado";
-        return;
-    }
-
-    // Horário: 08h até 18h
-    if(hora >= 8 && hora < 18){
-        status.innerHTML = "🟢 Aberto Agora";
-        status.className = "status-loja aberto";
-    } else {
-        status.innerHTML = "🔴 Fechado Agora";
-        status.className = "status-loja fechado";
-    }
-}
-
-verificarLoja();
-
-setInterval(verificarLoja, 60000);
-</script>
 </script>
 </body>
 </html>
