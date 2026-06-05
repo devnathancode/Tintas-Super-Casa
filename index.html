@@ -8,6 +8,28 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 <style>
 /* ─── CSS VARIABLES ─────────────────────────────── */
+/* STATUS DA LOJA */
+.status-loja{
+    width: fit-content;
+    margin: 20px auto;
+    padding: 12px 25px;
+    border-radius: 50px;
+    font-size: 18px;
+    font-weight: bold;
+    color: white;
+    transition: 0.3s;
+    box-shadow: 0 0 15px rgba(0,0,0,0.2);
+}
+
+.aberto{
+    background: linear-gradient(45deg,#00c853,#00e676);
+    box-shadow: 0 0 20px rgba(0,255,100,0.5);
+}
+
+.fechado{
+    background: linear-gradient(45deg,#d50000,#ff1744);
+    box-shadow: 0 0 20px rgba(255,0,0,0.4);
+}
 :root {
   --blue-dark: #0D47A1;
   --blue-mid:  #1565C0;
@@ -62,6 +84,10 @@ button{cursor:pointer;font-family:inherit;border:none;background:none}
 #close-banner:hover{opacity:1}
 
 /* ─── HEADER ─────────────────────────────────────── */
+<!-- BOTÃO ABERTO / FECHADO -->
+<div class="status-loja">
+    <span id="statusTexto">Verificando...</span>
+</div>
 header{position:sticky;top:0;z-index:500;background:var(--blue-dark);box-shadow:var(--shadow)}
 .header-inner{max-width:1280px;margin:0 auto;padding:0 24px;height:72px;display:flex;align-items:center;gap:24px}
 .logo{color:#fff;font-size:1.35rem;font-weight:900;letter-spacing:.5px;white-space:nowrap}
@@ -993,7 +1019,36 @@ function changeQty(id, delta){
   if(item.qty <= 0) removeFromCart(id);
   else { saveCart(); updateCartUI(); renderCartItems(); }
 }
+function verificarLoja() {
+    const agora = new Date();
 
+    // HORÁRIO DE BRASÍLIA
+    const hora = agora.getHours();
+    const dia = agora.getDay();
+
+    // DOMINGO FECHADO
+    const domingo = dia === 0;
+
+    // HORÁRIO:
+    // SEGUNDA A SÁBADO -> 08:00 às 18:00
+    const aberto = !domingo && hora >= 8 && hora < 18;
+
+    const status = document.querySelector(".status-loja");
+    const texto = document.getElementById("statusTexto");
+
+    if (aberto) {
+        status.classList.add("aberto");
+        status.classList.remove("fechado");
+        texto.innerHTML = "🟢 Aberto Agora";
+    } else {
+        status.classList.add("fechado");
+        status.classList.remove("aberto");
+        texto.innerHTML = "🔴 Fechado Agora";
+    }
+}
+
+verificarLoja();
+setInterval(verificarLoja, 60000);
 function updateCartUI(){
   const total = cart.reduce((s,i)=>s+i.qty,0);
   document.getElementById('cart-count').textContent = total;
