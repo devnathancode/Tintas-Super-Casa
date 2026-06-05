@@ -8,6 +8,26 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 <style>
 /* ─── CSS VARIABLES ─────────────────────────────── */
+.status-loja{
+    width: fit-content;
+    margin: 20px auto;
+    padding: 12px 24px;
+    border-radius: 40px;
+    font-size: 18px;
+    font-weight: bold;
+    color: white;
+    transition: 0.3s;
+}
+
+.aberto{
+    background: #00c853;
+    box-shadow: 0 0 15px #00c853;
+}
+
+.fechado{
+    background: #ff1744;
+    box-shadow: 0 0 15px #ff1744;
+}
 :root {
   --blue-dark: #0D47A1;
   --blue-mid:  #1565C0;
@@ -601,6 +621,10 @@ footer{background:linear-gradient(180deg,#0A2568 0%,#071A4A 100%);color:#fff;pad
 </style>
 </head>
 <body>
+<!-- BOTÃO STATUS -->
+<div id="statusLoja" class="status-loja fechado">
+    🔴 Fechado Agora
+</div>
 
 <!-- LOADER -->
 <div id="loader">
@@ -1267,6 +1291,36 @@ window.addEventListener('scroll',()=>{
 /* ─── INIT ─────────────────────────────────────── */
 renderProducts();
 updateCartUI();
+<script>
+function verificarLoja() {
+
+    const agora = new Date();
+    const hora = agora.getHours();
+    const dia = agora.getDay();
+
+    const status = document.getElementById("statusLoja");
+
+    // Domingo fechado
+    if(dia === 0){
+        status.innerHTML = "🔴 Fechado Agora";
+        status.className = "status-loja fechado";
+        return;
+    }
+
+    // Horário: 08h até 18h
+    if(hora >= 8 && hora < 18){
+        status.innerHTML = "🟢 Aberto Agora";
+        status.className = "status-loja aberto";
+    } else {
+        status.innerHTML = "🔴 Fechado Agora";
+        status.className = "status-loja fechado";
+    }
+}
+
+verificarLoja();
+
+setInterval(verificarLoja, 60000);
+</script>
 </script>
 </body>
 </html>
