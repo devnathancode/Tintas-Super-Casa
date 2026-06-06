@@ -1243,14 +1243,24 @@ const products = [
   {id:15,name:'Kit Pintura Atlas Completo',category:'acessorio',price:59.90,oldPrice:79.90,desc:'Rolo 23cm + bandeja + pincel 3" + fita crepe. Kit profissional.',badge:'Promoção',img:'https://images.unsplash.com/photo-1562259949-e8e7689d7828?w=400&q=80'},
   {id:16,name:'Tinta Automotiva Profissional 900ml',category:'automotiva',price:299.90,oldPrice:329.90,desc:'Esmalte automotivo de alta resistência para carroceria e peças.',badge:'',img:'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=400&q=80'},
 ];
+function getCartKey() {
+  const session = JSON.parse(localStorage.getItem('tsc_session') || 'null');
+  return session?.email ? `tsc_cart_${session.email}` : 'tsc_cart_guest';
+}
 
 /* ─── CART ── */
-let cart = JSON.parse(localStorage.getItem('tsc_cart')||'[]');
+let cart = JSON.parse(localStorage.getItem(getCartKey()) || '[]');
 let pendingProduct = null;
-
-function saveCart(){localStorage.setItem('tsc_cart',JSON.stringify(cart))}
+function saveCart() {
+  localStorage.setItem(getCartKey(), JSON.stringify(cart));
+}
 
 function openCepModal(id){
+  if(isGuest()){
+    showToast('⚠️ Faça login para adicionar ao carrinho!','error');
+    setTimeout(()=>{ window.location.href='login.html'; },1200);
+    return;
+  }
   pendingProduct = id;
   const p = products.find(x=>x.id===id);
   const inst = Math.ceil(p.price/10).toFixed(2).replace('.',',');
@@ -1267,7 +1277,11 @@ function addPendingToCart(){
   if(pendingProduct){addToCart(pendingProduct,true);pendingProduct=null;closeCepModal()}
 }
 
-function addToCart(id,skipModal=false){
+function addToCart(id, skipModal=false){
+  // Prefer session-managed addToCart when available (handles guests and logged users)
+  if (typeof window !== 'undefined' && typeof window.addToCart === 'function' && window.addToCart !== addToCart) {
+    return window.addToCart(id, skipModal);
+  }
   if(!skipModal){openCepModal(id);return}
   const product = products.find(p=>p.id===id);
   const existing = cart.find(i=>i.id===id);
@@ -1277,8 +1291,16 @@ function addToCart(id,skipModal=false){
   showToast(`✅ ${product.name} adicionado!`);
 }
 
-function removeFromCart(id){cart=cart.filter(i=>i.id!==id);saveCart();updateCartUI();renderCartItems()}
+function removeFromCart(id){
+  if (typeof window !== 'undefined' && typeof window.removeFromCart === 'function' && window.removeFromCart !== removeFromCart) {
+    return window.removeFromCart(id);
+  }
+  cart=cart.filter(i=>i.id!==id);saveCart();updateCartUI();renderCartItems()
+}
 function changeQty(id,delta){
+  if (typeof window !== 'undefined' && typeof window.changeQty === 'function' && window.changeQty !== changeQty) {
+    return window.changeQty(id, delta);
+  }
   const item=cart.find(i=>i.id===id);
   if(!item)return;
   item.qty+=delta;
@@ -1405,7 +1427,15 @@ function filterDept(cat){
 }
 
 /* ─── CART UI ── */
-document.getElementById('cart-btn').addEventListener('click',()=>{document.getElementById('cart-drawer').classList.add('open');document.getElementById('cart-overlay').classList.add('open')});
+document.getElementById('cart-btn').addEventListener('click',()=>{
+  if(isGuest()){
+    showToast('⚠️ Faça login para acessar o carrinho!','error');
+    setTimeout(()=>{ window.location.href='login.html'; },1200);
+    return;
+  }
+  document.getElementById('cart-drawer').classList.add('open');
+  document.getElementById('cart-overlay').classList.add('open');
+});
 document.getElementById('cart-close').addEventListener('click',()=>{document.getElementById('cart-drawer').classList.remove('open');document.getElementById('cart-overlay').classList.remove('open')});
 document.getElementById('cart-overlay').addEventListener('click',()=>{document.getElementById('cart-drawer').classList.remove('open');document.getElementById('cart-overlay').classList.remove('open')});
 document.getElementById('cep-modal-overlay').addEventListener('click',e=>{if(e.target===e.currentTarget)closeCepModal()});
@@ -1532,8 +1562,17 @@ function enviarWhatsApp(){
   showToast('✅ Redirecionando para o WhatsApp!','success');
 }
 
-function getSession(){
-  try { return JSON.parse(localStorage.getItem('tsc_session') || 'null'); } catch { return null; }
+function getSession() {
+  try {
+    return JSON.parse(localStorage.getItem('tsc_session') || 'null');
+  } catch {
+    return null;
+  }
+}
+
+function isGuest() {
+  const session = getSession();
+  return !session || session.guest === true;
 }
 function isLoggedIn(){
   const s = getSession();
@@ -1613,6 +1652,5 @@ window.addEventListener('scroll',()=>{
 renderProducts();updateCartUI();
 
 </script>
-<script src="session-integration.js"></script>
 </body>
 </html>
