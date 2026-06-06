@@ -144,6 +144,15 @@ header{position:sticky;top:0;z-index:500;background:var(--blue-dark);box-shadow:
 .header-actions{display:flex;align-items:center;gap:10px;margin-left:12px}
 .btn-icon{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:1rem;transition:var(--transition);position:relative;background:rgba(255,255,255,.1)}
 .btn-icon:hover{background:rgba(255,255,255,.22)}
+.profile-actions{position:relative;display:flex;align-items:center}
+.btn-profile{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.12);color:#fff;border:1.5px solid rgba(255,255,255,.25);border-radius:50px;padding:10px 14px;font-size:.88rem;font-weight:700;transition:var(--transition);cursor:pointer}
+.btn-profile:hover{background:rgba(255,255,255,.24)}
+.profile-menu{position:absolute;right:0;top:calc(100% + 12px);width:220px;background:#fff;border-radius:18px;box-shadow:0 18px 40px rgba(0,0,0,.18);overflow:hidden;opacity:0;visibility:hidden;transform:translateY(-8px);transition:opacity .2s ease,transform .2s ease,visibility .2s;z-index:20}
+.profile-menu.open{opacity:1;visibility:visible;transform:translateY(0)}
+.profile-menu button{width:100%;padding:12px 16px;text-align:left;background:none;border:none;border-bottom:1px solid rgba(235,235,235,1);font-size:.88rem;font-weight:600;color:#1A1A2E;display:flex;align-items:center;gap:10px;cursor:pointer;transition:background .2s}
+.profile-menu button:last-child{border-bottom:none}
+.profile-menu button:hover{background:rgba(245,245,245,1)}
+.profile-menu i{width:18px;text-align:center;font-size:1rem;color:var(--blue-mid)}
 .cart-count{position:absolute;top:-4px;right:-4px;background:var(--yellow);color:var(--blue-dark);font-size:.6rem;font-weight:800;width:17px;height:17px;border-radius:50%;display:flex;align-items:center;justify-content:center}
 .search-bar{position:relative;display:flex;align-items:center}
 .search-bar input{background:rgba(255,255,255,.12);border:1.5px solid rgba(255,255,255,.2);border-radius:24px;padding:8px 16px 8px 38px;color:#fff;font-family:inherit;font-size:.84rem;outline:none;width:200px;transition:var(--transition)}
@@ -706,6 +715,16 @@ footer{background:linear-gradient(180deg,#0A2568 0%,#071A4A 100%);color:#fff;pad
         <i class="fas fa-shopping-cart"></i>
         <span class="cart-count" id="cart-count">0</span>
       </button>
+      <div class="profile-actions">
+        <button class="btn-profile" id="profile-menu-btn" type="button">
+          <i class="fas fa-user"></i>
+          <span id="profile-label">Perfil</span>
+        </button>
+        <div class="profile-menu" id="profile-menu">
+          <button type="button" onclick="switchAccount()"><i class="fas fa-exchange-alt"></i> Trocar de conta</button>
+          <button type="button" onclick="doLogout()"><i class="fas fa-sign-out-alt"></i> Sair</button>
+        </div>
+      </div>
     </div>
     <div class="hamburger" id="hamburger"><span></span><span></span><span></span></div>
   </div>
@@ -1074,7 +1093,7 @@ footer{background:linear-gradient(180deg,#0A2568 0%,#071A4A 100%);color:#fff;pad
           </select>
         </div>
         <div class="form-group"><label>Mensagem *</label><textarea id="f-msg" placeholder="Descreva como podemos te ajudar..."></textarea></div>
-        <button class="btn-submit" onclick="enviarEmail()"><i class="fas fa-envelope"></i> Enviar por Email</button>
+        <button class="btn-submit" type="button" onclick="enviarEmail(event)"><i class="fas fa-envelope"></i> Enviar por Email</button>
       </div>
     </div>
   </div>
@@ -1267,35 +1286,44 @@ function changeQty(id,delta){
   else{saveCart();updateCartUI();renderCartItems()}
 }
 
+function getCurrentCart(){
+  if (typeof window !== 'undefined' && Array.isArray(window.cart)) return window.cart;
+  return Array.isArray(cart) ? cart : [];
+}
+
 function updateCartUI(){
-  document.getElementById('cart-count').textContent=cart.reduce((s,i)=>s+i.qty,0);
+  const current = getCurrentCart();
+  document.getElementById('cart-count').textContent = current.reduce((s,i)=>s+(i.qty||i.quantidade||1),0);
   renderCartItems();
 }
 
 function renderCartItems(){
   const container=document.getElementById('cart-items');
   const footer=document.getElementById('cart-footer');
-  if(cart.length===0){
+  const current = getCurrentCart();
+  if(current.length===0){
     container.innerHTML=`<div class="cart-empty"><i class="fas fa-shopping-cart"></i><p>Seu carrinho está vazio.</p></div>`;
     footer.style.display='none';return;
   }
   footer.style.display='block';
   let html='',subtotal=0;
-  cart.forEach(item=>{
-    const t=item.price*item.qty;subtotal+=t;
+  current.forEach(item=>{
+    const qty = item.qty || item.quantidade || 1;
+    const price = item.price || item.preco || 0;
+    const t=price*qty;subtotal+=t;
     html+=`<div class="cart-item">
-      <div class="cart-item-img"><img src="${item.img}" alt="${item.name}"></div>
+      <div class="cart-item-img"><img src="${item.img||''}" alt="${item.name||item.nome}"></div>
       <div class="cart-item-info">
-        <div class="cart-item-name">${item.name}</div>
-        <div class="cart-item-price">R$ ${item.price.toFixed(2).replace('.',',')}</div>
+        <div class="cart-item-name">${item.name||item.nome}</div>
+        <div class="cart-item-price">R$ ${price.toFixed(2).replace('.',',')}</div>
         <div class="cart-item-controls">
-          <button class="qty-btn" onclick="changeQty(${item.id},-1)">−</button>
-          <span class="qty-val">${item.qty}</span>
-          <button class="qty-btn" onclick="changeQty(${item.id},1)">+</button>
+          <button class="qty-btn" onclick="changeQty(${item.id||item.produto_id},-1)">−</button>
+          <span class="qty-val">${qty}</span>
+          <button class="qty-btn" onclick="changeQty(${item.id||item.produto_id},1)">+</button>
           <span style="margin-left:auto;font-weight:700;font-size:.86rem;color:var(--blue-dark)">R$ ${t.toFixed(2).replace('.',',')}</span>
         </div>
       </div>
-      <button class="cart-item-remove" onclick="removeFromCart(${item.id})"><i class="fas fa-trash-alt"></i></button>
+      <button class="cart-item-remove" onclick="removeFromCart(${item.id||item.produto_id})"><i class="fas fa-trash-alt"></i></button>
     </div>`;
   });
   container.innerHTML=html;
@@ -1303,7 +1331,7 @@ function renderCartItems(){
   document.getElementById('cart-total-val').textContent=`R$ ${subtotal.toFixed(2).replace('.',',')}`;
   const inst=Math.ceil(subtotal/10).toFixed(2).replace('.',',');
   document.getElementById('cart-installment').textContent=`💳 10x de R$ ${inst} sem juros — consulte condições`;
-  const msg='Olá! Gostaria de fazer um pedido:\n\n'+cart.map(i=>`• ${i.name} x${i.qty} = R$ ${(i.price*i.qty).toFixed(2).replace('.',',')}`).join('\n')+`\n\n*Total: R$ ${subtotal.toFixed(2).replace('.',',')}*`;
+  const msg='Olá! Gostaria de fazer um pedido:\n\n'+current.map(i=>`• ${i.name||i.nome} x${i.qty||i.quantidade||1} = R$ ${((i.price||i.preco)*(i.qty||i.quantidade||1)).toFixed(2).replace('.',',')}`).join('\n')+`\n\n*Total: R$ ${subtotal.toFixed(2).replace('.',',')}*`;
   document.getElementById('whatsapp-cart').href=`https://wa.me/5511966921863?text=${encodeURIComponent(msg)}`;
 }
 
@@ -1442,7 +1470,8 @@ renderCountdown('countdown2',Date.now()+6*3600000+47*60000);
 renderCountdown('countdown3',Date.now()+2*24*3600000+3*3600000);
 
 /* ─── EMAIL FORM ── */
-function enviarEmail(){
+function enviarEmail(event){
+  event.preventDefault();
   const nome=document.getElementById('f-nome').value.trim();
   const email=document.getElementById('f-email').value.trim();
   const assunto=document.getElementById('f-assunto').value;
@@ -1503,6 +1532,74 @@ function enviarWhatsApp(){
   showToast('✅ Redirecionando para o WhatsApp!','success');
 }
 
+function getSession(){
+  try { return JSON.parse(localStorage.getItem('tsc_session') || 'null'); } catch { return null; }
+}
+function isLoggedIn(){
+  const s = getSession();
+  return s && !s.guest;
+}
+function doLogout(){
+  localStorage.removeItem('tsc_session');
+  window.location.href = 'index.html';
+}
+function toggleProfileMenu(){
+  const menu = document.getElementById('profile-menu');
+  if (!menu) return;
+  menu.classList.toggle('open');
+}
+function closeProfileMenu(){
+  const menu = document.getElementById('profile-menu');
+  if (menu) menu.classList.remove('open');
+}
+function showProfileInfo(){
+  closeProfileMenu();
+  const session = getSession();
+  if (!session || !session.name || session.guest) {
+    window.location.href = 'login.html';
+    return;
+  }
+  showToast(`ℹ️ ${session.name}, detalhes da sua conta estão disponíveis no painel.`, 'info');
+}
+function switchAccount(){
+  closeProfileMenu();
+  window.location.href = 'login.html';
+}
+function openSettings(){
+  closeProfileMenu();
+  const session = getSession();
+  if (!session || session.guest) {
+    window.location.href = 'login.html';
+    return;
+  }
+  showToast('⚙️ Ajuste sua conta e preferências nas configurações.', 'info');
+}
+function updateProfileHeader(){
+  const session = getSession();
+  const label = document.getElementById('profile-label');
+  const btn = document.getElementById('profile-menu-btn');
+  const menu = document.getElementById('profile-menu');
+  if (!label || !btn || !menu) return;
+  btn.onclick = null;
+  if (!session || session.guest) {
+    label.textContent = 'Entrar';
+    menu.style.display = 'none';
+    menu.classList.remove('open');
+    btn.onclick = () => { window.location.href = 'login.html'; };
+  } else {
+    label.textContent = session.name.split(' ')[0] || 'Perfil';
+    menu.style.display = 'block';
+    btn.onclick = toggleProfileMenu;
+  }
+}
+document.addEventListener('click', e => {
+  const btn = document.getElementById('profile-menu-btn');
+  const menu = document.getElementById('profile-menu');
+  if (!btn || !menu) return;
+  if (!btn.contains(e.target) && !menu.contains(e.target)) closeProfileMenu();
+});
+window.addEventListener('load', updateProfileHeader);
+
 /* ─── NAV ACTIVE ── */
 const sections=document.querySelectorAll('section[id]');
 const navLinks=document.querySelectorAll('.nav-link,.mob-section a');
@@ -1514,6 +1611,8 @@ window.addEventListener('scroll',()=>{
 
 /* ─── INIT ── */
 renderProducts();updateCartUI();
+
 </script>
+<script src="session-integration.js"></script>
 </body>
 </html>
