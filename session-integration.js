@@ -1,4 +1,4 @@
-const API = 'https://3000/api';
+const API = 'https://tintas-super-casa-5.onrender.com/api';
 
 function getToken() {
   return localStorage.getItem('tsc_token') || null;
