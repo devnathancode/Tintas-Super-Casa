@@ -2006,7 +2006,7 @@ renderProducts();updateCartUI();
 
 <script>
 /* ─── DARK MODE ─── */
-let dark = localStorage.getItem('tsc_dark') === '1';
+dark = localStorage.getItem('tsc_dark') === '1';
 function applyDark(){
   document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
   document.getElementById('dark-icon').className = dark ? 'fas fa-sun' : 'fas fa-moon';
