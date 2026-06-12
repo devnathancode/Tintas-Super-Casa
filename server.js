@@ -20,7 +20,11 @@ if (!process.env.JWT_SECRET) {
   console.warn('⚠️ JWT_SECRET não definido no .env; usando segredo padrão de desenvolvimento.');
 }
 
-app.use(helmet({ crossOriginResourcePolicy: false }));
+// para:
+app.use(helmet({
+  crossOriginResourcePolicy: false,
+  contentSecurityPolicy: false
+}));
 app.use(express.json());
 app.use(express.static(path.resolve('./')));
 app.use((req, res, next) => {
