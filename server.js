@@ -1,61 +1,24 @@
 require('dotenv').config();
-const express    = require('express');
-const Database   = require('better-sqlite3');
-const jwt        = require('jsonwebtoken');
-const bcrypt     = require('bcryptjs');
-const helmet     = require('helmet');
-const rateLimit  = require('express-rate-limit');
-const path       = require('path');
+const express = require('express');
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const path = require('path');
+const { createClient } = require('@supabase/supabase-js');
 
-const app    = express();
-const PORT   = process.env.PORT || 3000;
-const SECRET = process.env.JWT_SECRET;
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_KEY
+);
 
-if (!SECRET) {
-  console.error('❌ ERRO: JWT_SECRET não definido no .env!');
-  process.exit(1);
+const app = express();
+const PORT = process.env.PORT || 3000;
+const SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
+
+if (!process.env.JWT_SECRET) {
+  console.warn('⚠️ JWT_SECRET não definido no .env; usando segredo padrão de desenvolvimento.');
 }
-
-const db = new Database('loja.db');
-
-db.exec(`
-  CREATE TABLE IF NOT EXISTS usuarios (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    nome       TEXT    NOT NULL,
-    email      TEXT    UNIQUE NOT NULL,
-    senha      TEXT    NOT NULL,
-    role       TEXT    NOT NULL DEFAULT 'cliente',
-    criado_em  INTEGER NOT NULL DEFAULT (strftime('%s','now'))
-  );
-  CREATE TABLE IF NOT EXISTS carrinho (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    usuario_id  INTEGER NOT NULL,
-    produto_id  TEXT    NOT NULL,
-    nome        TEXT    NOT NULL,
-    preco       REAL    NOT NULL,
-    quantidade  INTEGER NOT NULL DEFAULT 1,
-    img         TEXT,
-    UNIQUE(usuario_id, produto_id),
-    FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
-  );
-  CREATE TABLE IF NOT EXISTS pedidos (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    usuario_id  INTEGER NOT NULL,
-    total       REAL    NOT NULL,
-    status      TEXT    NOT NULL DEFAULT 'pendente',
-    criado_em   INTEGER NOT NULL DEFAULT (strftime('%s','now')),
-    FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
-  );
-  CREATE TABLE IF NOT EXISTS pedido_itens (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    pedido_id  INTEGER NOT NULL,
-    produto_id TEXT    NOT NULL,
-    nome       TEXT    NOT NULL,
-    preco      REAL    NOT NULL,
-    quantidade INTEGER NOT NULL,
-    FOREIGN KEY (pedido_id) REFERENCES pedidos(id)
-  );
-`);
 
 app.use(helmet({ crossOriginResourcePolicy: false }));
 app.use(express.json());
@@ -91,6 +54,7 @@ function autenticar(req, res, next) {
     return res.status(401).json({ erro: 'Token inválido' });
   }
 }
+
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
@@ -102,11 +66,13 @@ app.get('/login.html', (req, res) => {
 app.get('/index.html', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
+
 app.get('/api', (req, res) => {
   res.json({ status: 'ok', mensagem: 'API Tintas Super Casa rodando ✅' });
 });
 
-app.post('/api/registro', registerLimiter, (req, res) => {
+// REGISTRO
+app.post('/api/registro', registerLimiter, async (req, res) => {
   const { nome, email, senha } = req.body;
   if (!nome || !email || !senha)
     return res.status(400).json({ erro: 'Preencha todos os campos.' });
@@ -121,91 +87,189 @@ app.post('/api/registro', registerLimiter, (req, res) => {
 
   try {
     const hash = bcrypt.hashSync(senha, 12);
-    const result = db.prepare('INSERT INTO usuarios (nome, email, senha) VALUES (?, ?, ?)').run(nome.trim(), email.toLowerCase().trim(), hash);
-    const token = jwt.sign({ id: result.lastInsertRowid, nome: nome.trim(), email: email.toLowerCase().trim(), role: 'cliente' }, SECRET, { expiresIn: '7d' });
-    res.status(201).json({ mensagem: 'Conta criada!', token, usuario: { id: result.lastInsertRowid, nome: nome.trim(), email: email.toLowerCase().trim() } });
+    const { data, error } = await supabase
+      .from('usuarios')
+      .insert([{ nome: nome.trim(), email: email.toLowerCase().trim(), senha: hash }])
+      .select()
+      .single();
+
+    if (error) {
+      if (error.code === '23505')
+        return res.status(409).json({ erro: 'Este email já está cadastrado.' });
+      return res.status(500).json({ erro: 'Erro interno.' });
+    }
+
+    const token = jwt.sign(
+      { id: data.id, nome: data.nome, email: data.email, role: data.role },
+      SECRET,
+      { expiresIn: '7d' }
+    );
+    res.status(201).json({ mensagem: 'Conta criada!', token, usuario: { id: data.id, nome: data.nome, email: data.email } });
   } catch (err) {
-    if (err.message.includes('UNIQUE'))
-      return res.status(409).json({ erro: 'Este email já está cadastrado.' });
     res.status(500).json({ erro: 'Erro interno.' });
   }
 });
 
-app.post('/api/login', loginLimiter, (req, res) => {
+// LOGIN
+app.post('/api/login', loginLimiter, async (req, res) => {
   const { email, senha } = req.body;
   if (!email || !senha)
     return res.status(400).json({ erro: 'Informe email e senha.' });
 
-  const usuario = db.prepare('SELECT * FROM usuarios WHERE email = ?').get(email.toLowerCase().trim());
+  const { data: usuario } = await supabase
+    .from('usuarios')
+    .select('*')
+    .eq('email', email.toLowerCase().trim())
+    .single();
+
   const senhaFake = '$2a$12$invalido.hash.para.evitar.timing.attack.aqui';
   const senhaCorreta = bcrypt.compareSync(senha, usuario ? usuario.senha : senhaFake);
 
   if (!usuario || !senhaCorreta)
     return res.status(401).json({ erro: 'Email ou senha incorretos.' });
 
-  const token = jwt.sign({ id: usuario.id, nome: usuario.nome, email: usuario.email, role: usuario.role }, SECRET, { expiresIn: '7d' });
+  const token = jwt.sign(
+    { id: usuario.id, nome: usuario.nome, email: usuario.email, role: usuario.role },
+    SECRET,
+    { expiresIn: '7d' }
+  );
   res.json({ mensagem: 'Login realizado!', token, usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email, role: usuario.role } });
 });
 
-app.get('/api/perfil', autenticar, (req, res) => {
-  const usuario = db.prepare('SELECT id, nome, email, role, criado_em FROM usuarios WHERE id = ?').get(req.usuario.id);
-  if (!usuario) return res.status(404).json({ erro: 'Usuário não encontrado.' });
-  res.json(usuario);
+// PERFIL
+app.get('/api/perfil', autenticar, async (req, res) => {
+  const { data, error } = await supabase
+    .from('usuarios')
+    .select('id, nome, email, role, criado_em')
+    .eq('id', req.usuario.id)
+    .single();
+
+  if (error || !data) return res.status(404).json({ erro: 'Usuário não encontrado.' });
+  res.json(data);
 });
 
-app.get('/api/carrinho', autenticar, (req, res) => {
-  res.json(db.prepare('SELECT * FROM carrinho WHERE usuario_id = ?').all(req.usuario.id));
+// CARRINHO - GET
+app.get('/api/carrinho', autenticar, async (req, res) => {
+  const { data } = await supabase
+    .from('carrinho')
+    .select('*')
+    .eq('usuario_id', req.usuario.id);
+  res.json(data || []);
 });
 
-app.post('/api/carrinho', autenticar, (req, res) => {
+// CARRINHO - ADD
+app.post('/api/carrinho', autenticar, async (req, res) => {
   const { produto_id, nome, preco, quantidade, img } = req.body;
   if (!produto_id || !nome || !preco)
     return res.status(400).json({ erro: 'Dados incompletos.' });
 
   const qtd = parseInt(quantidade) || 1;
-  const existente = db.prepare('SELECT * FROM carrinho WHERE usuario_id = ? AND produto_id = ?').get(req.usuario.id, String(produto_id));
+
+  const { data: existente } = await supabase
+    .from('carrinho')
+    .select('*')
+    .eq('usuario_id', req.usuario.id)
+    .eq('produto_id', String(produto_id))
+    .single();
 
   if (existente) {
-    db.prepare('UPDATE carrinho SET quantidade = quantidade + ? WHERE id = ?').run(qtd, existente.id);
+    await supabase
+      .from('carrinho')
+      .update({ quantidade: existente.quantidade + qtd })
+      .eq('id', existente.id);
   } else {
-    db.prepare('INSERT INTO carrinho (usuario_id, produto_id, nome, preco, quantidade, img) VALUES (?, ?, ?, ?, ?, ?)').run(req.usuario.id, String(produto_id), nome, preco, qtd, img || '');
+    await supabase
+      .from('carrinho')
+      .insert([{ usuario_id: req.usuario.id, produto_id: String(produto_id), nome, preco, quantidade: qtd, img: img || '' }]);
   }
-  res.json({ mensagem: 'Item adicionado!', carrinho: db.prepare('SELECT * FROM carrinho WHERE usuario_id = ?').all(req.usuario.id) });
+
+  const { data: carrinho } = await supabase.from('carrinho').select('*').eq('usuario_id', req.usuario.id);
+  res.json({ mensagem: 'Item adicionado!', carrinho: carrinho || [] });
 });
 
-app.put('/api/carrinho/:id', autenticar, (req, res) => {
+// CARRINHO - UPDATE
+app.put('/api/carrinho/:id', autenticar, async (req, res) => {
   const qtd = parseInt(req.body.quantidade);
   if (!qtd || qtd < 1) return res.status(400).json({ erro: 'Quantidade inválida.' });
-  const item = db.prepare('SELECT * FROM carrinho WHERE id = ? AND usuario_id = ?').get(req.params.id, req.usuario.id);
+
+  const { data: item } = await supabase
+    .from('carrinho')
+    .select('*')
+    .eq('id', req.params.id)
+    .eq('usuario_id', req.usuario.id)
+    .single();
+
   if (!item) return res.status(404).json({ erro: 'Item não encontrado.' });
-  db.prepare('UPDATE carrinho SET quantidade = ? WHERE id = ? AND usuario_id = ?').run(qtd, req.params.id, req.usuario.id);
-  res.json({ mensagem: 'Atualizado!', carrinho: db.prepare('SELECT * FROM carrinho WHERE usuario_id = ?').all(req.usuario.id) });
+
+  await supabase.from('carrinho').update({ quantidade: qtd }).eq('id', req.params.id);
+
+  const { data: carrinho } = await supabase.from('carrinho').select('*').eq('usuario_id', req.usuario.id);
+  res.json({ mensagem: 'Atualizado!', carrinho: carrinho || [] });
 });
 
-app.delete('/api/carrinho/:id', autenticar, (req, res) => {
-  db.prepare('DELETE FROM carrinho WHERE id = ? AND usuario_id = ?').run(req.params.id, req.usuario.id);
-  res.json({ mensagem: 'Removido!', carrinho: db.prepare('SELECT * FROM carrinho WHERE usuario_id = ?').all(req.usuario.id) });
+// CARRINHO - DELETE ITEM
+app.delete('/api/carrinho/:id', autenticar, async (req, res) => {
+  await supabase.from('carrinho').delete().eq('id', req.params.id).eq('usuario_id', req.usuario.id);
+  const { data: carrinho } = await supabase.from('carrinho').select('*').eq('usuario_id', req.usuario.id);
+  res.json({ mensagem: 'Removido!', carrinho: carrinho || [] });
 });
 
-app.delete('/api/carrinho', autenticar, (req, res) => {
-  db.prepare('DELETE FROM carrinho WHERE usuario_id = ?').run(req.usuario.id);
+// CARRINHO - LIMPAR
+app.delete('/api/carrinho', autenticar, async (req, res) => {
+  await supabase.from('carrinho').delete().eq('usuario_id', req.usuario.id);
   res.json({ mensagem: 'Carrinho limpo!', carrinho: [] });
 });
 
-app.post('/api/pedidos', autenticar, (req, res) => {
-  const itens = db.prepare('SELECT * FROM carrinho WHERE usuario_id = ?').all(req.usuario.id);
-  if (!itens.length) return res.status(400).json({ erro: 'Carrinho vazio.' });
+// PEDIDOS - CRIAR
+app.post('/api/pedidos', autenticar, async (req, res) => {
+  const { data: itens } = await supabase.from('carrinho').select('*').eq('usuario_id', req.usuario.id);
+  if (!itens || !itens.length) return res.status(400).json({ erro: 'Carrinho vazio.' });
+
   const total = itens.reduce((s, i) => s + i.preco * i.quantidade, 0);
-  const pedido = db.prepare('INSERT INTO pedidos (usuario_id, total) VALUES (?, ?)').run(req.usuario.id, total);
-  const insertItem = db.prepare('INSERT INTO pedido_itens (pedido_id, produto_id, nome, preco, quantidade) VALUES (?, ?, ?, ?, ?)');
-  itens.forEach(i => insertItem.run(pedido.lastInsertRowid, i.produto_id, i.nome, i.preco, i.quantidade));
-  db.prepare('DELETE FROM carrinho WHERE usuario_id = ?').run(req.usuario.id);
-  res.status(201).json({ mensagem: 'Pedido realizado!', pedido_id: pedido.lastInsertRowid, total });
+
+  const { data: pedido, error } = await supabase
+    .from('pedidos')
+    .insert([{ usuario_id: req.usuario.id, total }])
+    .select()
+    .single();
+
+  if (error) return res.status(500).json({ erro: 'Erro ao criar pedido.' });
+
+  const itensPedido = itens.map(i => ({
+    pedido_id: pedido.id,
+    produto_id: i.produto_id,
+    nome: i.nome,
+    preco: i.preco,
+    quantidade: i.quantidade
+  }));
+
+  await supabase.from('pedido_itens').insert(itensPedido);
+  await supabase.from('carrinho').delete().eq('usuario_id', req.usuario.id);
+
+  res.status(201).json({ mensagem: 'Pedido realizado!', pedido_id: pedido.id, total });
 });
 
-app.get('/api/pedidos', autenticar, (req, res) => {
-  const pedidos = db.prepare('SELECT * FROM pedidos WHERE usuario_id = ? ORDER BY criado_em DESC').all(req.usuario.id);
-  res.json(pedidos.map(p => ({ ...p, itens: db.prepare('SELECT * FROM pedido_itens WHERE pedido_id = ?').all(p.id) })));
+// PEDIDOS - LISTAR
+app.get('/api/pedidos', autenticar, async (req, res) => {
+  const { data: pedidos } = await supabase
+    .from('pedidos')
+    .select('*')
+    .eq('usuario_id', req.usuario.id)
+    .order('criado_em', { ascending: false });
+
+  if (!pedidos) return res.json([]);
+
+  const pedidosComItens = await Promise.all(pedidos.map(async (p) => {
+    const { data: itens } = await supabase.from('pedido_itens').select('*').eq('pedido_id', p.id);
+    return { ...p, itens: itens || [] };
+  }));
+
+  res.json(pedidosComItens);
+});
+
+app.listen(PORT, () => {
+  console.log(`\n✅ API rodando em http://localhost:${PORT}`);
+  console.log(`🔒 Segurança: helmet + rate limit + bcrypt + JWT\n`);
 });
 
 app.listen(PORT, () => {
