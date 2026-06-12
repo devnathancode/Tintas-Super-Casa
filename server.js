@@ -13,6 +13,7 @@ const supabase = createClient(
 );
 
 const app = express();
+app.set('trust proxy', 1); // adiciona essa linha
 const PORT = process.env.PORT || 3000;
 const SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
 
