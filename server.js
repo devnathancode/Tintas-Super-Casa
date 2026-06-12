@@ -101,6 +101,7 @@ app.post('/api/registro', registerLimiter, async (req, res) => {
       .single();
 
     if (error) {
+      console.error('Supabase erro registro:', error); 
       if (error.code === '23505')
         return res.status(409).json({ erro: 'Este email já está cadastrado.' });
       return res.status(500).json({ erro: 'Erro interno.' });
@@ -112,9 +113,10 @@ app.post('/api/registro', registerLimiter, async (req, res) => {
       { expiresIn: '7d' }
     );
     res.status(201).json({ mensagem: 'Conta criada!', token, usuario: { id: data.id, nome: data.nome, email: data.email } });
-  } catch (err) {
+  } catch (err) {   
+    console.error('Catch erro registro:', err);  
     res.status(500).json({ erro: 'Erro interno.' });
-  }
+  } 
 });
 
 // LOGIN
