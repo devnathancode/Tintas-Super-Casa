@@ -38,11 +38,13 @@ app.use((req, res, next) => {
 
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, max: 10,
-  message: { erro: 'Muitas tentativas. Tente em 15 minutos.' }
+  message: { erro: 'Muitas tentativas. Tente em 15 minutos.' },
+  validate: { xForwardedForHeader: false }
 });
 const registerLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, max: 5,
-  message: { erro: 'Muitos cadastros. Tente mais tarde.' }
+  message: { erro: 'Muitos cadastros. Tente mais tarde.' },
+  validate: { xForwardedForHeader: false }
 });
 
 function autenticar(req, res, next) {
