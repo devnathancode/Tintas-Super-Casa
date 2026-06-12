@@ -265,14 +265,6 @@ app.get('/api/pedidos', autenticar, async (req, res) => {
   }));
 
   res.json(pedidosComItens);
-<<<<<<< HEAD
-=======
-});
-
-app.listen(PORT, () => {
-  console.log(`\n✅ API rodando em http://localhost:${PORT}`);
-  console.log(`🔒 Segurança: helmet + rate limit + bcrypt + JWT\n`);
->>>>>>> b00e22c37a9581d8ebcc2700b475f2bc485437ce
 });
 
 app.listen(PORT, () => {
