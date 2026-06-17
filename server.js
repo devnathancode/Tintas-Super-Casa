@@ -13,7 +13,7 @@ const supabase = createClient(
 );
 
 const app = express();
-app.set('trust proxy', 1); // adiciona essa linha
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000;
 const SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
 
@@ -21,11 +21,7 @@ if (!process.env.JWT_SECRET) {
   console.warn('⚠️ JWT_SECRET não definido no .env; usando segredo padrão de desenvolvimento.');
 }
 
-// para:
-app.use(helmet({
-  crossOriginResourcePolicy: false,
-  contentSecurityPolicy: false
-}));
+app.use(helmet({ crossOriginResourcePolicy: false, contentSecurityPolicy: false }));
 app.use(express.json());
 app.use(express.static(path.resolve('./')));
 app.use((req, res, next) => {
@@ -62,23 +58,92 @@ function autenticar(req, res, next) {
   }
 }
 
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
-});
-
-app.get('/login.html', (req, res) => {
-  res.sendFile(path.join(__dirname, 'login.html'));
-});
-
-app.get('/index.html', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
-});
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
+app.get('/login.html', (req, res) => res.sendFile(path.join(__dirname, 'login.html')));
+app.get('/index.html', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
+app.get('/redefinir-senha.html', (req, res) => res.sendFile(path.join(__dirname, 'redefinir-senha.html')));
 
 app.get('/api', (req, res) => {
   res.json({ status: 'ok', mensagem: 'API Tintas Super Casa rodando ✅' });
 });
 
+// ══════════════════════════════════════
+// PRODUTOS — preços sempre do banco
+// ══════════════════════════════════════
+app.get('/api/produtos', async (req, res) => {
+  const { category } = req.query;
+  let query = supabase
+    .from('produtos')
+    .select('id, name, category, price, old_price, description, badge, img')
+    .eq('ativo', true)
+    .order('id');
+  if (category && category !== 'all') query = query.eq('category', category);
+  const { data, error } = await query;
+  if (error) {
+    console.error('Erro ao buscar produtos:', error);
+    return res.status(500).json({ erro: 'Erro ao buscar produtos.' });
+  }
+  res.json(data || []);
+});
+
+// ══════════════════════════════════════
+// RECUPERAÇÃO DE SENHA
+// ══════════════════════════════════════
+app.post('/api/recuperar-senha', async (req, res) => {
+  const { email } = req.body;
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+    return res.status(400).json({ erro: 'Informe um email válido.' });
+
+  const supabaseAuth = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_ANON_KEY
+  );
+
+  await supabaseAuth.auth.resetPasswordForEmail(email, {
+    redirectTo: process.env.RESET_PASSWORD_URL || 'http://localhost:3000/redefinir-senha.html'
+  });
+
+  // Sempre retorna sucesso (não revela se email existe)
+  res.json({ mensagem: 'Se este email estiver cadastrado, você receberá o link em breve.' });
+});
+
+app.post('/api/redefinir-senha', async (req, res) => {
+  const { access_token, nova_senha } = req.body;
+  if (!access_token || !nova_senha)
+    return res.status(400).json({ erro: 'Token e nova senha são obrigatórios.' });
+
+  const senhaForte = nova_senha.length >= 8
+    && /[A-Z]/.test(nova_senha) && /[a-z]/.test(nova_senha)
+    && /[0-9]/.test(nova_senha) && /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]/.test(nova_senha);
+
+  if (!senhaForte)
+    return res.status(400).json({ erro: 'Senha fraca. Use maiúsculas, minúsculas, números e símbolos.' });
+
+  const supabaseAuth = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_ANON_KEY
+  );
+
+  const { error: sessionError } = await supabaseAuth.auth.setSession({
+    access_token,
+    refresh_token: access_token
+  });
+
+  if (sessionError)
+    return res.status(401).json({ erro: 'Link expirado ou inválido. Solicite um novo.' });
+
+  const hash = bcrypt.hashSync(nova_senha, 12);
+  const { data: authUser } = await supabaseAuth.auth.getUser();
+  if (authUser?.user?.email) {
+    await supabase.from('usuarios').update({ senha: hash }).eq('email', authUser.user.email);
+  }
+
+  res.json({ mensagem: 'Senha redefinida com sucesso! Faça login.' });
+});
+
+// ══════════════════════════════════════
 // REGISTRO
+// ══════════════════════════════════════
 app.post('/api/registro', registerLimiter, async (req, res) => {
   const { nome, email, senha } = req.body;
   if (!nome || !email || !senha)
@@ -88,7 +153,8 @@ app.post('/api/registro', registerLimiter, async (req, res) => {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
     return res.status(400).json({ erro: 'Email inválido.' });
 
-  const senhaForte = senha.length >= 8 && /[A-Z]/.test(senha) && /[a-z]/.test(senha) && /[0-9]/.test(senha) && /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]/.test(senha);
+  const senhaForte = senha.length >= 8 && /[A-Z]/.test(senha) && /[a-z]/.test(senha)
+    && /[0-9]/.test(senha) && /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]/.test(senha);
   if (!senhaForte)
     return res.status(400).json({ erro: 'Senha fraca. Use maiúsculas, minúsculas, números e símbolos.' });
 
@@ -97,11 +163,10 @@ app.post('/api/registro', registerLimiter, async (req, res) => {
     const { data, error } = await supabase
       .from('usuarios')
       .insert([{ nome: nome.trim(), email: email.toLowerCase().trim(), senha: hash }])
-      .select()
-      .single();
+      .select().single();
 
     if (error) {
-      console.error('Supabase erro registro:', error); 
+      console.error('Supabase erro registro:', error);
       if (error.code === '23505')
         return res.status(409).json({ erro: 'Este email já está cadastrado.' });
       return res.status(500).json({ erro: 'Erro interno.' });
@@ -109,27 +174,26 @@ app.post('/api/registro', registerLimiter, async (req, res) => {
 
     const token = jwt.sign(
       { id: data.id, nome: data.nome, email: data.email, role: data.role },
-      SECRET,
-      { expiresIn: '7d' }
+      SECRET, { expiresIn: '7d' }
     );
     res.status(201).json({ mensagem: 'Conta criada!', token, usuario: { id: data.id, nome: data.nome, email: data.email } });
-  } catch (err) {   
-    console.error('Catch erro registro:', err);  
+  } catch (err) {
+    console.error('Catch erro registro:', err);
     res.status(500).json({ erro: 'Erro interno.' });
-  } 
+  }
 });
 
+// ══════════════════════════════════════
 // LOGIN
+// ══════════════════════════════════════
 app.post('/api/login', loginLimiter, async (req, res) => {
   const { email, senha } = req.body;
   if (!email || !senha)
     return res.status(400).json({ erro: 'Informe email e senha.' });
 
   const { data: usuario } = await supabase
-    .from('usuarios')
-    .select('*')
-    .eq('email', email.toLowerCase().trim())
-    .single();
+    .from('usuarios').select('*')
+    .eq('email', email.toLowerCase().trim()).single();
 
   const senhaFake = '$2a$12$invalido.hash.para.evitar.timing.attack.aqui';
   const senhaCorreta = bcrypt.compareSync(senha, usuario ? usuario.senha : senhaFake);
@@ -139,56 +203,55 @@ app.post('/api/login', loginLimiter, async (req, res) => {
 
   const token = jwt.sign(
     { id: usuario.id, nome: usuario.nome, email: usuario.email, role: usuario.role },
-    SECRET,
-    { expiresIn: '7d' }
+    SECRET, { expiresIn: '7d' }
   );
   res.json({ mensagem: 'Login realizado!', token, usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email, role: usuario.role } });
 });
 
+// ══════════════════════════════════════
 // PERFIL
+// ══════════════════════════════════════
 app.get('/api/perfil', autenticar, async (req, res) => {
   const { data, error } = await supabase
-    .from('usuarios')
-    .select('id, nome, email, role, criado_em')
-    .eq('id', req.usuario.id)
-    .single();
-
+    .from('usuarios').select('id, nome, email, role, criado_em')
+    .eq('id', req.usuario.id).single();
   if (error || !data) return res.status(404).json({ erro: 'Usuário não encontrado.' });
   res.json(data);
 });
 
-// CARRINHO - GET
+// ══════════════════════════════════════
+// CARRINHO
+// ══════════════════════════════════════
 app.get('/api/carrinho', autenticar, async (req, res) => {
-  const { data } = await supabase
-    .from('carrinho')
-    .select('*')
-    .eq('usuario_id', req.usuario.id);
+  const { data } = await supabase.from('carrinho').select('*').eq('usuario_id', req.usuario.id);
   res.json(data || []);
 });
 
-// CARRINHO - ADD
 app.post('/api/carrinho', autenticar, async (req, res) => {
-  const { produto_id, nome, preco, quantidade, img } = req.body;
-  if (!produto_id || !nome || !preco)
+  const { produto_id, nome, quantidade, img } = req.body;
+  if (!produto_id || !nome)
     return res.status(400).json({ erro: 'Dados incompletos.' });
 
+  // Busca o preço sempre do banco — nunca aceita preço do cliente
+  const { data: produto } = await supabase
+    .from('produtos').select('price').eq('id', produto_id).single();
+  if (!produto)
+    return res.status(404).json({ erro: 'Produto não encontrado.' });
+
+  const preco = parseFloat(produto.price);
   const qtd = parseInt(quantidade) || 1;
 
   const { data: existente } = await supabase
-    .from('carrinho')
-    .select('*')
+    .from('carrinho').select('*')
     .eq('usuario_id', req.usuario.id)
-    .eq('produto_id', String(produto_id))
-    .single();
+    .eq('produto_id', String(produto_id)).single();
 
   if (existente) {
-    await supabase
-      .from('carrinho')
+    await supabase.from('carrinho')
       .update({ quantidade: existente.quantidade + qtd })
       .eq('id', existente.id);
   } else {
-    await supabase
-      .from('carrinho')
+    await supabase.from('carrinho')
       .insert([{ usuario_id: req.usuario.id, produto_id: String(produto_id), nome, preco, quantidade: qtd, img: img || '' }]);
   }
 
@@ -196,61 +259,60 @@ app.post('/api/carrinho', autenticar, async (req, res) => {
   res.json({ mensagem: 'Item adicionado!', carrinho: carrinho || [] });
 });
 
-// CARRINHO - UPDATE
 app.put('/api/carrinho/:id', autenticar, async (req, res) => {
   const qtd = parseInt(req.body.quantidade);
   if (!qtd || qtd < 1) return res.status(400).json({ erro: 'Quantidade inválida.' });
 
-  const { data: item } = await supabase
-    .from('carrinho')
-    .select('*')
-    .eq('id', req.params.id)
-    .eq('usuario_id', req.usuario.id)
-    .single();
-
+  const { data: item } = await supabase.from('carrinho').select('*')
+    .eq('id', req.params.id).eq('usuario_id', req.usuario.id).single();
   if (!item) return res.status(404).json({ erro: 'Item não encontrado.' });
 
   await supabase.from('carrinho').update({ quantidade: qtd }).eq('id', req.params.id);
-
   const { data: carrinho } = await supabase.from('carrinho').select('*').eq('usuario_id', req.usuario.id);
   res.json({ mensagem: 'Atualizado!', carrinho: carrinho || [] });
 });
 
-// CARRINHO - DELETE ITEM
 app.delete('/api/carrinho/:id', autenticar, async (req, res) => {
   await supabase.from('carrinho').delete().eq('id', req.params.id).eq('usuario_id', req.usuario.id);
   const { data: carrinho } = await supabase.from('carrinho').select('*').eq('usuario_id', req.usuario.id);
   res.json({ mensagem: 'Removido!', carrinho: carrinho || [] });
 });
 
-// CARRINHO - LIMPAR
 app.delete('/api/carrinho', autenticar, async (req, res) => {
   await supabase.from('carrinho').delete().eq('usuario_id', req.usuario.id);
   res.json({ mensagem: 'Carrinho limpo!', carrinho: [] });
 });
 
-// PEDIDOS - CRIAR
+// ══════════════════════════════════════
+// PEDIDOS — total calculado no servidor
+// ══════════════════════════════════════
 app.post('/api/pedidos', autenticar, async (req, res) => {
   const { data: itens } = await supabase.from('carrinho').select('*').eq('usuario_id', req.usuario.id);
   if (!itens || !itens.length) return res.status(400).json({ erro: 'Carrinho vazio.' });
 
-  const total = itens.reduce((s, i) => s + i.preco * i.quantidade, 0);
+  // Busca preços do banco — nunca usa o preço salvo no carrinho
+  const ids = itens.map(i => i.produto_id);
+  const { data: produtosDb } = await supabase.from('produtos').select('id, price').in('id', ids);
+
+  const total = itens.reduce((s, i) => {
+    const prod = produtosDb?.find(p => String(p.id) === String(i.produto_id));
+    return s + (prod?.price || 0) * i.quantidade;
+  }, 0);
 
   const { data: pedido, error } = await supabase
-    .from('pedidos')
-    .insert([{ usuario_id: req.usuario.id, total }])
-    .select()
-    .single();
-
+    .from('pedidos').insert([{ usuario_id: req.usuario.id, total }]).select().single();
   if (error) return res.status(500).json({ erro: 'Erro ao criar pedido.' });
 
-  const itensPedido = itens.map(i => ({
-    pedido_id: pedido.id,
-    produto_id: i.produto_id,
-    nome: i.nome,
-    preco: i.preco,
-    quantidade: i.quantidade
-  }));
+  const itensPedido = itens.map(i => {
+    const prod = produtosDb?.find(p => String(p.id) === String(i.produto_id));
+    return {
+      pedido_id: pedido.id,
+      produto_id: i.produto_id,
+      nome: i.nome,
+      preco: prod?.price || 0,
+      quantidade: i.quantidade
+    };
+  });
 
   await supabase.from('pedido_itens').insert(itensPedido);
   await supabase.from('carrinho').delete().eq('usuario_id', req.usuario.id);
@@ -258,11 +320,9 @@ app.post('/api/pedidos', autenticar, async (req, res) => {
   res.status(201).json({ mensagem: 'Pedido realizado!', pedido_id: pedido.id, total });
 });
 
-// PEDIDOS - LISTAR
 app.get('/api/pedidos', autenticar, async (req, res) => {
   const { data: pedidos } = await supabase
-    .from('pedidos')
-    .select('*')
+    .from('pedidos').select('*')
     .eq('usuario_id', req.usuario.id)
     .order('criado_em', { ascending: false });
 
